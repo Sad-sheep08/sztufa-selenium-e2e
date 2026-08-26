@@ -134,13 +134,14 @@ node runner.js --suite smoke --browser chrome,edge --headed
 - CI 使用 PostgreSQL 16 临时数据库，检出三个应用的 `develop` 分支，自动安装、迁移、准备账号、构建并启动三端。
 - 无论成功失败，统一上传 Markdown 报告、汇总日志、失败截图/HTML 和三端服务日志，保留 7 天。
 
-首次发布此测试仓库时，需要在 GitHub 创建空仓库并配置远端：
+测试仓库已发布到 [Sad-sheep08/sztufa-selenium-e2e](https://github.com/Sad-sheep08/sztufa-selenium-e2e)，本地 `develop` 跟踪 `origin/develop`。首次 Chrome Smoke CI 已通过。
+
+后续正常提交：
 
 ```bash
-git remote add origin <测试仓库地址>
 git add .
-git commit -m "ci: add Chrome Selenium E2E pipeline"
-git push -u origin develop
+git commit -m "test: update Selenium coverage"
+git push
 ```
 
 三个应用仓库当前按公开仓库 `Vw1n/sztufa-server`、`Vw1n/sztu-fa-web`、`Vw1n/sztufa-admin` 检出；如改为私有仓库，需要给 Actions 配置可读取这些仓库的 Token。

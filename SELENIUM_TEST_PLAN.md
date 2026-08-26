@@ -100,7 +100,7 @@ test/
 | --- | --- | --- | --- | --- |
 | Smoke | 启动、首页、登录页、核心接口可用 | Chrome | 每次提交 | 3 分钟内 |
 | Critical | 登录、报名、赛程、比分、新闻等核心路径 | Chrome | PR/合并前 | 10 分钟内 |
-| Cross-browser | 核心路径兼容性 | Chrome + Edge | 每日或发布前 | 20 分钟内 |
+| Chrome Full | 全分类回归 | Chrome | 每周或发布前 | 20 分钟内 |
 | Full regression | 全量业务与权限矩阵 | Chrome + Edge | 发布候选版本 | 30 分钟内 |
 
 ## 5. 用例清单与优先级
@@ -265,7 +265,7 @@ test/
 
 按独立第四仓库方案，`test/` 已初始化为 `develop` Git 仓库，并新增 `.github/workflows/selenium-e2e.yml`。根据当前验收决定，CI 不执行 Edge：Push/PR 运行 Chrome Smoke，每周一北京时间约 02:30 和手动 `all` 运行 Chrome 52 条全套。
 
-工作流使用 PostgreSQL 16 Service Container，分别检出三个应用的 `develop` 分支，自动执行依赖安装、Prisma migration、独立 E2E seed、三端生产构建、后台服务启动和健康轮询。测试结束后始终上传单一测试汇总报告、日志、失败截图/HTML 与三端服务日志，保留 7 天。测试仓库当前尚未配置远端地址，首次推送后工作流才会在 GitHub 生效。
+工作流使用 PostgreSQL 16 Service Container，分别检出三个应用的 `develop` 分支，自动执行依赖安装、Prisma migration、独立 E2E seed、三端生产构建、后台服务启动和健康轮询。测试结束后始终上传单一测试汇总报告、日志、失败截图/HTML 与三端服务日志，保留 7 天。仓库已发布至 `Sad-sheep08/sztufa-selenium-e2e`；首次 Push 触发的 Chrome Smoke 工作流在约 2 分钟内通过。
 
 ## 9. npm 命令规划
 
@@ -309,7 +309,7 @@ test/
 
 ### 定时与发布门禁
 
-- 每日：Chrome + Edge 的 P0/P1 用例。
+- 每周：Chrome 全分类回归。
 - 发布前：完整回归、权限矩阵和生产构建预览环境。
 - 连续失败或存在 P0 失败时禁止发布。
 - 不稳定用例不得简单重试后忽略；最多重试一次，并建立待修记录。
@@ -360,7 +360,7 @@ test/
 
 ### 阶段 5：CI 与发布门禁（1–2 天）
 
-- 配置 PR Smoke、每日跨浏览器回归和发布前全量回归。
+- 配置 PR Chrome Smoke、每周 Chrome 全量回归和发布前手动全量回归。
 - 上传失败产物并输出测试摘要。
 - 记录执行时间和不稳定率。
 
