@@ -1,0 +1,4 @@
+const assert = require('node:assert/strict');
+const { assertNoSensitiveLeak, openLogin, rawRequest } = require('../../helpers/security-suite');
+async function run({ driver }) { const injection = "admin' OR '1'='1"; const api = await rawRequest('/api/v1/auth/login', { method: 'POST', body: { username: injection, password: injection } }); assert.equal(api.response.status, 401); assert.match(api.text, /用户名或密码错误/); assertNoSensitiveLeak(api.text); const page = await openLogin(driver); await page.login(injection, injection); await driver.sleep(600); assert.ok((await driver.getCurrentUrl()).includes('/login')); const source = await driver.getPageSource(); assert.ok(source.includes('auth-alert-error')); assertNoSensitiveLeak(source); }
+module.exports = { id: 'SEC-004', name: '登录注入输入失败且响应不泄露内部信息', suite: 'security', run };

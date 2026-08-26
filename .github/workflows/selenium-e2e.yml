@@ -1,0 +1,172 @@
+name: Chrome Selenium E2E
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # 每周一北京时间 02:30（UTC 周日 18:30）执行 Chrome 全量回归
+    - cron: '30 18 * * 0'
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: 测试范围
+        required: true
+        default: all
+        type: choice
+        options: [smoke, all]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: selenium-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  chrome-e2e:
+    name: Chrome ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.suite == 'all')) && 'Full' || 'Smoke' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: sztufa_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d sztufa_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/sztufa_e2e
+      DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/sztufa_e2e
+      JWT_SECRET: ci-e2e-jwt-secret-not-for-production
+      JWT_EXPIRES_IN: 3600s
+      R2_ENDPOINT: http://127.0.0.1:9000
+      R2_ACCESS_KEY_ID: test
+      R2_SECRET_ACCESS_KEY: test
+      R2_BUCKET_NAME: sztufa-e2e-assets
+      R2_PUBLIC_URL: http://127.0.0.1:9000/sztufa-e2e-assets
+      BACKUP_RESTORE_ENABLED: 'false'
+      PORT: 3000
+      API_PROXY_TARGET: http://127.0.0.1:3000
+      WEB_BASE_URL: http://127.0.0.1:5173
+      ADMIN_BASE_URL: http://127.0.0.1:8080
+      API_BASE_URL: http://127.0.0.1:3000
+      E2E_BROWSER: chrome
+      E2E_HEADLESS: 'true'
+      E2E_TIMEOUT: 15000
+      E2E_NEWS_EDITOR_USERNAME: editor
+      E2E_NEWS_EDITOR_PASSWORD: editor123
+      E2E_MATCH_SCORER_USERNAME: scorer
+      E2E_MATCH_SCORER_PASSWORD: scorer123
+
+    steps:
+      - name: 检出 E2E 测试仓库
+        uses: actions/checkout@v6
+
+      - name: 检出服务端 develop
+        uses: actions/checkout@v6
+        with:
+          repository: Vw1n/sztufa-server
+          ref: develop
+          path: sztufa-server
+
+      - name: 检出公开站 develop
+        uses: actions/checkout@v6
+        with:
+          repository: Vw1n/sztu-fa-web
+          ref: develop
+          path: sztu-fa-web
+
+      - name: 检出管理端 develop
+        uses: actions/checkout@v6
+        with:
+          repository: Vw1n/sztufa-admin
+          ref: develop
+          path: sztufa-admin
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            sztufa-server/package-lock.json
+            sztu-fa-web/package-lock.json
+            sztufa-admin/package-lock.json
+
+      - name: 建立本地同级项目路径
+        run: |
+          ln -sfn "$GITHUB_WORKSPACE/sztufa-server" "$GITHUB_WORKSPACE/../sztufa-server"
+          ln -sfn "$GITHUB_WORKSPACE/sztu-fa-web" "$GITHUB_WORKSPACE/../sztu-fa-web"
+          ln -sfn "$GITHUB_WORKSPACE/sztufa-admin" "$GITHUB_WORKSPACE/../sztufa-admin"
+
+      - name: 安装锁定依赖
+        run: |
+          npm ci
+          npm ci --prefix sztufa-server
+          npm ci --prefix sztu-fa-web
+          npm ci --prefix sztufa-admin
+
+      - name: 准备 PostgreSQL Schema 与 E2E 种子
+        run: |
+          cat > sztufa-server/.env.e2e <<EOF
+          DATABASE_URL=$DATABASE_URL
+          DIRECT_URL=$DIRECT_URL
+          JWT_SECRET=$JWT_SECRET
+          JWT_EXPIRES_IN=$JWT_EXPIRES_IN
+          R2_ENDPOINT=$R2_ENDPOINT
+          R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID
+          R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY
+          R2_BUCKET_NAME=$R2_BUCKET_NAME
+          R2_PUBLIC_URL=$R2_PUBLIC_URL
+          PORT=$PORT
+          EOF
+          npm --prefix sztufa-server run prisma:generate
+          npm --prefix sztufa-server run prisma:deploy
+          node support/ci/seed-e2e.js
+
+      - name: 构建服务端和两个前端
+        run: |
+          npm --prefix sztufa-server run build
+          npm --prefix sztu-fa-web run build
+          npm --prefix sztufa-admin run build
+
+      - name: 启动三端服务
+        run: |
+          mkdir -p artifacts/service-logs
+          npm --prefix sztufa-server run start:prod > artifacts/service-logs/api.log 2>&1 &
+          npm --prefix sztu-fa-web run dev -- --host 127.0.0.1 --port 5173 > artifacts/service-logs/web.log 2>&1 &
+          (cd sztufa-admin && npx webpack serve --host 127.0.0.1 --port 8080) > artifacts/service-logs/admin.log 2>&1 &
+          node scripts/wait-for-services.js
+
+      - name: Chrome Smoke 门禁
+        if: ${{ github.event_name != 'schedule' && (github.event_name != 'workflow_dispatch' || inputs.suite == 'smoke') }}
+        run: npm run test:smoke -- --browser chrome
+
+      - name: Chrome 全量回归
+        if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.suite == 'all') }}
+        run: npm run test:all
+
+      - name: 上传 Selenium 报告与服务日志
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: selenium-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            artifacts/reports/
+            artifacts/logs/
+            artifacts/screenshots/
+            artifacts/html/
+            artifacts/service-logs/
+          if-no-files-found: warn
+          retention-days: 7

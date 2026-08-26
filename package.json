@@ -1,0 +1,29 @@
+{
+  "name": "sztufa-selenium-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SZTUFA Selenium E2E browser automation test environment",
+  "scripts": {
+    "test": "npm run test:smoke",
+    "test:smoke": "node runner.js --suite smoke",
+    "test:public": "node runner.js --suite public",
+    "test:admin": "node runner.js --suite admin",
+    "test:permissions": "node runner.js --suite permissions",
+    "test:business": "node runner.js --suite business",
+    "test:matches": "node runner.js --suite matches",
+    "test:seasons": "node runner.js --suite seasons",
+    "test:rules": "node runner.js --suite rules",
+    "test:data": "node runner.js --suite data",
+    "test:security": "node runner.js --suite security",
+    "test:compatibility": "node runner.js --suite compatibility",
+    "test:chrome": "node runner.js --suite smoke --browser chrome",
+    "test:edge": "node runner.js --suite smoke --browser edge",
+    "test:headed": "node runner.js --suite smoke --browser chrome --headed",
+    "test:all": "node runner.js --suite all --browser chrome",
+    "test:all:edge": "node runner.js --suite all --browser edge",
+    "test:all:browsers": "node runner.js --suite all --browser chrome,edge"
+  },
+  "devDependencies": {
+    "selenium-webdriver": "^4.47.0"
+  }
+}

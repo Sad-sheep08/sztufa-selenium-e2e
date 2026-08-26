@@ -1,0 +1,4 @@
+const assert = require('node:assert/strict');
+const { apiRequest, loginAdmin, openDataTab } = require('../../helpers/data-suite');
+async function run({ driver }) { const token = await loginAdmin(); const key = 'private-backups/database/nonexistent-e2e.json.gz'; const restore = await apiRequest('/api/v1/backups/restore', { token, method: 'POST', body: { key, confirmText: 'WRONG' } }); assert.equal(restore.response.status, 503); assert.match(JSON.stringify(restore.data), /备份恢复功能未启用/); const deletion = await apiRequest('/api/v1/backups', { token, method: 'DELETE', body: { key, confirmText: 'WRONG' } }); assert.equal(deletion.response.status, 400); assert.match(JSON.stringify(deletion.data), /DELETE_BACKUP/); const source = await openDataTab(driver, '数据灾备与归档'); assert.ok(source.includes('备份与恢复操作')); assert.ok(source.includes('覆盖还原')); assert.ok(source.includes('DELETE_BACKUP')); }
+module.exports = { id: 'DATA-005', name: '恢复功能开关与备份删除二次确认提供双重保护', suite: 'data', run };

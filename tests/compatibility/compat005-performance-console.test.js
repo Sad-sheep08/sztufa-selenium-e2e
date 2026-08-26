@@ -1,0 +1,4 @@
+const assert = require('node:assert/strict');
+const { openLoginAt } = require('../../helpers/compatibility-suite');
+async function run({ driver }) { await openLoginAt(driver, 1280, 900); const timing = await driver.executeScript(() => { const n = performance.getEntriesByType('navigation')[0]; return { duration: n?.duration || 0, domContentLoaded: n?.domContentLoadedEventEnd || 0, load: n?.loadEventEnd || 0 }; }); assert.ok(timing.duration > 0 && timing.duration < 5000, `登录页加载应小于 5 秒: ${JSON.stringify(timing)}`); let logs = []; try { logs = await driver.manage().logs().get('browser'); } catch {} const severe = logs.filter((entry) => Number(entry.level?.value || 0) >= 1000 && !/favicon\.ico/i.test(entry.message || '')); assert.deepEqual(severe.map((x) => x.message), []); }
+module.exports = { id: 'COMPAT-005', name: '登录页加载性能预算与严重控制台错误检查', suite: 'compatibility', run };

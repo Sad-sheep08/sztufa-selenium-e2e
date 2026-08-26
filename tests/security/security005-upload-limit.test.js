@@ -1,0 +1,4 @@
+const assert = require('node:assert/strict');
+const { USERS, apiBase, assertNoSensitiveLeak, loginApi, openLogin } = require('../../helpers/security-suite');
+async function run({ driver }) { const token = await loginApi(USERS.superAdmin); const form = new FormData(); form.append('file', new Blob([new Uint8Array(5 * 1024 * 1024 + 1)], { type: 'image/png' }), 'oversized.png'); const response = await fetch(`${apiBase}/api/v1/upload`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form }); const text = await response.text(); assert.equal(response.status, 413); assertNoSensitiveLeak(text); const page = await openLogin(driver); assert.equal(await page.isFormVisible(), true); const source = await driver.getPageSource(); assert.ok(source.includes('校园足球赛事系统')); assert.ok(source.includes('登录您的账户')); }
+module.exports = { id: 'SEC-005', name: '超过 5MB 的上传在对象存储前被拒绝', suite: 'security', run };

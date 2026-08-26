@@ -1,0 +1,5 @@
+const assert = require('node:assert/strict');
+const { By, Key } = require('selenium-webdriver');
+const { openLoginAt } = require('../../helpers/compatibility-suite');
+async function run({ driver }) { await openLoginAt(driver, 1280, 900); const username = await driver.findElement(By.id('username')); const password = await driver.findElement(By.id('password')); assert.equal(await driver.findElement(By.css('label[for="username"]')).isDisplayed(), true); assert.equal(await driver.findElement(By.css('label[for="password"]')).isDisplayed(), true); assert.equal(await username.getAttribute('autocomplete'), 'username'); assert.equal(await password.getAttribute('autocomplete'), 'current-password'); await username.click(); await username.sendKeys(Key.TAB); assert.equal(await driver.executeScript(() => document.activeElement?.id), 'password'); const toggle = await driver.findElement(By.css('.password-toggle')); assert.equal(await toggle.getAttribute('aria-label'), '显示密码'); }
+module.exports = { id: 'COMPAT-003', name: '登录表单标签、自动填充语义与键盘焦点可达', suite: 'compatibility', run };

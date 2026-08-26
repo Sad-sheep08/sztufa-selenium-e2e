@@ -1,0 +1,15 @@
+node_modules/
+.env
+.env.local
+artifacts/
+*.log
+
+# 根目录临时驱动/安装遗留（正式驱动存放在 tools/selenium/ 中）
+/chromedriver.exe
+/chromedriver-win64/
+/tools/selenium/
+
+# CI 本地检出的三个应用仓库
+/sztufa-server/
+/sztu-fa-web/
+/sztufa-admin/

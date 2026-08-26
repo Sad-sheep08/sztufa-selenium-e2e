@@ -1,0 +1,4 @@
+const assert = require('node:assert/strict');
+const { historyDocument, loginAdmin, multipartRequest, openDataTab } = require('../../helpers/data-suite');
+async function run({ driver }) { const token = await loginAdmin(); const result = await multipartRequest('/api/v1/import/json/preview', token, 'e2e-history.json', JSON.stringify(historyDocument())); assert.ok(result.response.ok); assert.equal(result.data.canImport, true); assert.deepEqual(result.data.records, { seasons: 1, teams: 2, players: 1, matches: 1, events: 1 }); assert.match(result.data.digest, /^[a-f0-9]{64}$/); const source = await openDataTab(driver, '历史 JSON 导入'); assert.ok(source.includes('历史 JSON 智能导入')); assert.ok(source.includes('选择历史 JSON 文件')); }
+module.exports = { id: 'DATA-001', name: '历史 JSON 预检统计且不写入数据库', suite: 'data', run };
