@@ -49,11 +49,18 @@ jobs:
       DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/sztufa_e2e
       JWT_SECRET: ci-e2e-jwt-secret-not-for-production
       JWT_EXPIRES_IN: 3600s
+      TRUST_PROXY: none
       R2_ENDPOINT: http://127.0.0.1:9000
-      R2_ACCESS_KEY_ID: test
-      R2_SECRET_ACCESS_KEY: test
+      R2_ACCESS_KEY_ID: minioadmin
+      R2_SECRET_ACCESS_KEY: minioadmin123
       R2_BUCKET_NAME: sztufa-e2e-assets
       R2_PUBLIC_URL: http://127.0.0.1:9000/sztufa-e2e-assets
+      CARD_R2_ENDPOINT: http://127.0.0.1:9000
+      CARD_R2_ACCESS_KEY_ID: minioadmin
+      CARD_R2_SECRET_ACCESS_KEY: minioadmin123
+      CARD_R2_BUCKET_NAME: sztufa-e2e-private-cards
+      CARD_STORAGE_PRIVATE_CONFIRMED: 'true'
+      ADMIN_BOOTSTRAP_TOKEN: ci-bootstrap-secret-token
       BACKUP_RESTORE_ENABLED: 'false'
       PORT: 3000
       API_PROXY_TARGET: http://127.0.0.1:3000
@@ -117,23 +124,57 @@ jobs:
           npm ci --prefix sztu-fa-web
           npm ci --prefix sztufa-admin
 
-      - name: 准备 PostgreSQL Schema 与 E2E 种子
+      - name: 启动 MinIO S3 存储服务并检查健康
+        run: |
+          docker run -d --name minio \
+            -p 127.0.0.1:9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin \
+            -e MINIO_ROOT_PASSWORD=minioadmin123 \
+            minio/minio:RELEASE.2024-01-18T22-51-28Z server /data
+
+          echo "等待 MinIO 服务就绪..."
+          for i in {1..30}; do
+            if curl -s -f http://127.0.0.1:9000/minio/health/live > /dev/null 2>&1; then
+              echo "MinIO 服务已就绪 (重试第 $i 次成功)"
+              break
+            fi
+            if [ $i -eq 30 ]; then
+              echo "MinIO 服务启动超时"
+              docker logs minio
+              exit 1
+            fi
+            sleep 1
+          done
+
+      - name: 初始化 MinIO S3 存储桶与 PostgreSQL Schema
         run: |
           cat > sztufa-server/.env.e2e <<EOF
           DATABASE_URL=$DATABASE_URL
           DIRECT_URL=$DIRECT_URL
           JWT_SECRET=$JWT_SECRET
           JWT_EXPIRES_IN=$JWT_EXPIRES_IN
+          TRUST_PROXY=$TRUST_PROXY
           R2_ENDPOINT=$R2_ENDPOINT
           R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID
           R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY
           R2_BUCKET_NAME=$R2_BUCKET_NAME
           R2_PUBLIC_URL=$R2_PUBLIC_URL
+          CARD_R2_ENDPOINT=$CARD_R2_ENDPOINT
+          CARD_R2_ACCESS_KEY_ID=$CARD_R2_ACCESS_KEY_ID
+          CARD_R2_SECRET_ACCESS_KEY=$CARD_R2_SECRET_ACCESS_KEY
+          CARD_R2_BUCKET_NAME=$CARD_R2_BUCKET_NAME
+          CARD_STORAGE_PRIVATE_CONFIRMED=$CARD_STORAGE_PRIVATE_CONFIRMED
+          ADMIN_BOOTSTRAP_TOKEN=$ADMIN_BOOTSTRAP_TOKEN
           PORT=$PORT
           EOF
+          node support/ci/init-minio.js
           npm --prefix sztufa-server run prisma:generate
           npm --prefix sztufa-server run prisma:deploy
           node support/ci/seed-e2e.js
+
+      - name: 执行会员服务真实 PostgreSQL 集成测试
+        run: |
+          npm --prefix sztufa-server run test:integration:members
 
       - name: 构建服务端和两个前端
         run: |
@@ -170,3 +211,11 @@ jobs:
             artifacts/service-logs/
           if-no-files-found: warn
           retention-days: 7
+
+      - name: 收尾销毁 MinIO 容器
+        if: always()
+        run: |
+          mkdir -p artifacts/service-logs
+          docker logs minio > artifacts/service-logs/minio.log 2>&1 || true
+          docker stop minio > /dev/null 2>&1 || true
+          docker rm minio > /dev/null 2>&1 || true

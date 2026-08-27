@@ -1,6 +1,6 @@
 const path = require('node:path');
-const { PrismaClient } = require(path.resolve(__dirname, '../../sztufa-server/node_modules/@prisma/client'));
-const bcrypt = require(path.resolve(__dirname, '../../sztufa-server/node_modules/bcryptjs'));
+const { PrismaClient } = require(path.resolve(__dirname, '../../../sztufa-server/node_modules/@prisma/client'));
+const bcrypt = require(path.resolve(__dirname, '../../../sztufa-server/node_modules/bcryptjs'));
 
 const prisma = new PrismaClient();
 

@@ -1,5 +1,6 @@
 const path = require('node:path');
 const fs = require('node:fs');
+const { redactText } = require('./helpers/redaction');
 const { createDriver } = require('./config/webdriver');
 const {
   captureFailureArtifacts,
@@ -12,7 +13,8 @@ const envConfig = require('./config/env');
 function parseArgs() {
   const args = process.argv.slice(2);
   const options = {
-    suite: 'smoke',
+    suite: null, // 未指定时若有 testId 则跨套件搜索，否则默认 smoke
+    testId: null,
     browsers: [envConfig.browser],
     headed: !envConfig.headless,
   };
@@ -21,23 +23,53 @@ function parseArgs() {
     const arg = args[i];
     if (arg === '--suite' && args[i + 1]) {
       options.suite = args[++i].toLowerCase();
+    } else if (arg.startsWith('--suite=')) {
+      options.suite = arg.slice(8).toLowerCase();
+    } else if ((arg === '--test' || arg === '--case') && args[i + 1]) {
+      options.testId = args[++i].trim().toUpperCase();
+    } else if (arg.startsWith('--test=')) {
+      options.testId = arg.slice(7).trim().toUpperCase();
+    } else if (arg.startsWith('--case=')) {
+      options.testId = arg.slice(7).trim().toUpperCase();
     } else if (arg === '--browser' && args[i + 1]) {
       options.browsers = args[++i].split(',').map((b) => b.trim().toLowerCase());
+    } else if (arg.startsWith('--browser=')) {
+      options.browsers = arg.slice(10).split(',').map((b) => b.trim().toLowerCase());
     } else if (arg === '--headed') {
       options.headed = true;
+    } else {
+      console.error(`[Runner] 错误: 未知命令行参数 '${arg}'`);
+      console.error(`  支持参数: --test <id>, --suite <name>, --browser <name>, --headed`);
+      process.exit(1);
     }
+  }
+
+  if (!options.suite && !options.testId) {
+    options.suite = 'smoke';
   }
 
   return options;
 }
 
-function loadTestCases(suite) {
-  const testCases = [];
+function loadTestCases(suite, targetTestId) {
+  let testCases = [];
   const testsDir = path.join(__dirname, 'tests');
 
-  const suiteDirs = suite === 'all'
-    ? ['smoke', 'permissions', 'business', 'matches', 'seasons', 'rules', 'data', 'security', 'compatibility']
-    : [suite];
+  const allSuites = [
+    'smoke',
+    'permissions',
+    'business',
+    'matches',
+    'seasons',
+    'rules',
+    'data',
+    'security',
+    'compatibility',
+  ];
+
+  const suiteDirs = suite === 'all' || (!suite && targetTestId)
+    ? allSuites
+    : [suite || 'smoke'];
 
   for (const dirName of suiteDirs) {
     const dirPath = path.join(testsDir, dirName);
@@ -45,8 +77,8 @@ function loadTestCases(suite) {
 
     const files = fs.readdirSync(dirPath).filter((f) => f.endsWith('.test.js'));
     for (const file of files) {
+      const casePath = path.join(dirPath, file);
       try {
-        const casePath = path.join(dirPath, file);
         const testCase = require(casePath);
         if (testCase && typeof testCase.run === 'function') {
           testCases.push({
@@ -56,11 +88,18 @@ function loadTestCases(suite) {
             run: testCase.run,
             requiresBrowser: testCase.requiresBrowser !== false,
           });
+        } else {
+          throw new Error(`测试模块未导出有效的 run 函数`);
         }
       } catch (err) {
         console.error(`[Runner] 加载测试文件失败 ${file}: ${err.message}`);
+        throw err;
       }
     }
+  }
+
+  if (targetTestId) {
+    testCases = testCases.filter((tc) => tc.id.toUpperCase() === targetTestId);
   }
 
   return testCases;
@@ -69,22 +108,23 @@ function loadTestCases(suite) {
 async function main() {
   const options = parseArgs();
   const startedAt = new Date();
+  const suiteLabel = options.testId ? `test:${options.testId}` : options.suite;
   const runArtifacts = createRunArtifacts({
-    suite: options.suite,
+    suite: suiteLabel,
     browsers: options.browsers,
     headed: options.headed,
   });
   console.log(`\n==================================================`);
   console.log(`🚀 SZTUFA Selenium 自动化测试运行器`);
-  console.log(`   套件: ${options.suite}`);
+  console.log(`   范围: ${options.testId ? `指定用例 [${options.testId}]` : `套件 [${options.suite}]`}`);
   console.log(`   浏览器: ${options.browsers.join(', ')}`);
   console.log(`   模式: ${options.headed ? '有界面 (--headed)' : '无头 (Headless)'}`);
   console.log(`==================================================\n`);
 
-  const testCases = loadTestCases(options.suite);
+  const testCases = loadTestCases(options.suite, options.testId);
   if (testCases.length === 0) {
-    console.warn(`[Runner] 未找到符合套件 '${options.suite}' 的测试用例。`);
-    process.exit(0);
+    console.error(`[Runner] 错误: 未找到符合条件的测试用例 (suite=${options.suite}, testId=${options.testId})。`);
+    process.exit(1);
   }
 
   const results = [];
@@ -121,10 +161,10 @@ async function main() {
         appendRunLog(runArtifacts, `PASS  ${caseLabel} (${duration}s)`);
       } catch (err) {
         pass = false;
-        errorMsg = err.stack || err.message;
+        errorMsg = redactText(err.stack || err.message);
         const duration = ((Date.now() - caseStart) / 1000).toFixed(2);
         console.log(`❌ 失败 (${duration}s)`);
-        console.error(`     └─ 错误: ${err.message}`);
+        console.error(`     └─ 错误: ${redactText(err.message)}`);
         appendRunLog(runArtifacts, `FAIL  ${caseLabel} (${duration}s)\n${errorMsg}`);
 
         if (driver) {
@@ -191,7 +231,11 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error(`[Runner] 严重异常:`, err);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((err) => {
+    console.error(`[Runner] 严重异常:`, redactText(err.stack || err.message));
+    process.exit(1);
+  });
+}
+
+module.exports = { loadTestCases, main };
