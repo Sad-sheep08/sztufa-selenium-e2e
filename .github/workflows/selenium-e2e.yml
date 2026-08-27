@@ -48,6 +48,8 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/sztufa_e2e
       DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/sztufa_e2e
       JWT_SECRET: ci-e2e-jwt-secret-not-for-production
+      MEMBER_JWT_SECRET: ci-member-jwt-secret-not-for-production
+      CRON_SECRET: ci-cleanup-secret-not-for-production
       JWT_EXPIRES_IN: 3600s
       TRUST_PROXY: none
       R2_ENDPOINT: http://127.0.0.1:9000
@@ -152,6 +154,8 @@ jobs:
           DATABASE_URL=$DATABASE_URL
           DIRECT_URL=$DIRECT_URL
           JWT_SECRET=$JWT_SECRET
+          MEMBER_JWT_SECRET=$MEMBER_JWT_SECRET
+          CRON_SECRET=$CRON_SECRET
           JWT_EXPIRES_IN=$JWT_EXPIRES_IN
           TRUST_PROXY=$TRUST_PROXY
           R2_ENDPOINT=$R2_ENDPOINT
@@ -180,14 +184,14 @@ jobs:
         run: |
           npm --prefix sztufa-server run build
           npm --prefix sztu-fa-web run build
-          npm --prefix sztufa-admin run build
+          API_BASE_URL=/api/v1 npm --prefix sztufa-admin run build
 
       - name: 启动三端服务
         run: |
           mkdir -p artifacts/service-logs
           npm --prefix sztufa-server run start:prod > artifacts/service-logs/api.log 2>&1 &
           npm --prefix sztu-fa-web run dev -- --host 127.0.0.1 --port 5173 > artifacts/service-logs/web.log 2>&1 &
-          (cd sztufa-admin && npx webpack serve --host 127.0.0.1 --port 8080) > artifacts/service-logs/admin.log 2>&1 &
+          (cd sztufa-admin && API_BASE_URL=/api/v1 npx webpack serve --host 127.0.0.1 --port 8080) > artifacts/service-logs/admin.log 2>&1 &
           node scripts/wait-for-services.js
 
       - name: Chrome Smoke 门禁
