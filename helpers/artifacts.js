@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { redactText } = require('./redaction');
 
 const ARTIFACTS_DIR = path.join(__dirname, '..', 'artifacts');
 
@@ -37,7 +38,7 @@ function createRunArtifacts({ suite, browsers, headed }) {
 
 function appendRunLog(runArtifacts, text) {
   if (!runArtifacts?.logPath) return;
-  fs.appendFileSync(runArtifacts.logPath, `${text}\n`, 'utf8');
+  fs.appendFileSync(runArtifacts.logPath, `${redactText(text)}\n`, 'utf8');
 }
 
 function toRelativeArtifactPath(filePath) {
@@ -81,7 +82,7 @@ function writeMarkdownReport(runArtifacts, summary) {
     }
   }
   lines.push('## 汇总日志', '', `- [本次完整日志](${toRelativeArtifactPath(runArtifacts.logPath)})`, '');
-  const content = `${lines.join('\n')}\n`;
+  const content = redactText(`${lines.join('\n')}\n`);
   fs.writeFileSync(runArtifacts.reportPath, content, 'utf8');
   fs.writeFileSync(path.join(ARTIFACTS_DIR, 'reports', 'LATEST.md'), content, 'utf8');
   return runArtifacts.reportPath;
@@ -102,19 +103,23 @@ async function captureFailureArtifacts(driver, testName, runArtifacts) {
 
   const savedFiles = {};
 
+  // 敏感流程不落地原始截图/HTML；字符串脱敏无法可靠清除图片和 DOM 中的隐私。
+  const sensitive = /BIZ-006|SEC-006/i.test(testName);
   // 1. 截图
   try {
-    const screenshotBase64 = await driver.takeScreenshot();
+    const screenshotBase64 = sensitive ? null : await driver.takeScreenshot();
+    if (screenshotBase64) {
     const screenshotPath = path.join(ARTIFACTS_DIR, 'screenshots', `${baseName}.png`);
     fs.writeFileSync(screenshotPath, Buffer.from(screenshotBase64, 'base64'));
     savedFiles.screenshot = screenshotPath;
+    }
   } catch (err) {
     console.error(`[Artifacts] 截图捕获失败: ${err.message}`);
   }
 
   // 2. 页面 HTML 源码
   try {
-    const pageSource = await driver.getPageSource();
+    const pageSource = sensitive ? '<!-- 敏感流程：不保存原始页面 -->' : redactText(await driver.getPageSource());
     const htmlPath = path.join(ARTIFACTS_DIR, 'html', `${baseName}.html`);
     fs.writeFileSync(htmlPath, pageSource, 'utf8');
     savedFiles.html = htmlPath;
@@ -153,6 +158,7 @@ async function captureFailureArtifacts(driver, testName, runArtifacts) {
 }
 
 module.exports = {
+  redactText,
   captureFailureArtifacts,
   createRunArtifacts,
   appendRunLog,

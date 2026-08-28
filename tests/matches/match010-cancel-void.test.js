@@ -1,10 +1,8 @@
+const { ensureVerifiedMember } = require('../../helpers/verified-member');
 const assert = require('node:assert/strict');
 const { By } = require('selenium-webdriver');
 const { apiRequest, ensureTargetMatch, loginScorer, openScorerAdmin, prepareMatchFixture } = require('../../helpers/match-suite');
-async function loginStudent() {
-  await apiRequest('/api/v1/auth/student-register', { method: 'POST', body: { username: 'match_student', password: 'match_student123', studentId: 'E2EMATCHUSER' } });
-  const login = await apiRequest('/api/v1/auth/login', { method: 'POST', body: { username: 'match_student', password: 'match_student123' } }); assert.ok(login.response.ok); return login.data.token;
-}
+async function loginStudent() { return (await ensureVerifiedMember('match_student_card', 'E2ECARDMATCH')).token; }
 async function test(options = {}) {
   const f = prepareMatchFixture(); const scorerToken = await loginScorer(); const match = await ensureTargetMatch(scorerToken, f); const studentToken = await loginStudent();
   await apiRequest(`/api/v1/matches/${match.id}`, { token: scorerToken, method: 'PATCH', body: { status: 'scheduled', matchDate: new Date(Date.now() + 86400000).toISOString(), homeScore: 0, awayScore: 0, events: [] } });
