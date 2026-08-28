@@ -81,25 +81,25 @@ jobs:
       - name: 检出 E2E 测试仓库
         uses: actions/checkout@v6
 
-      - name: 检出服务端 develop
+      - name: 检出服务端配套版本（PR 固定提交，常规运行使用 develop）
         uses: actions/checkout@v6
         with:
           repository: Vw1n/sztufa-server
-          ref: develop
+          ref: ${{ github.event_name == 'pull_request' && 'f39e013f04d444691b3adda5598f506e3283968e' || 'develop' }}
           path: sztufa-server
 
-      - name: 检出公开站 develop
+      - name: 检出公开站配套版本（PR 固定提交，常规运行使用 develop）
         uses: actions/checkout@v6
         with:
           repository: Vw1n/sztu-fa-web
-          ref: develop
+          ref: ${{ github.event_name == 'pull_request' && 'f0889af36e35e1884fa532dbe1a888ab72e2887f' || 'develop' }}
           path: sztu-fa-web
 
-      - name: 检出管理端 develop
+      - name: 检出管理端配套版本（PR 固定提交，常规运行使用 develop）
         uses: actions/checkout@v6
         with:
           repository: Vw1n/sztufa-admin
-          ref: develop
+          ref: ${{ github.event_name == 'pull_request' && '5b076fabf0c6f2342f7b26a8a6a6457b5a769888' || 'develop' }}
           path: sztufa-admin
 
       - name: 配置 Node.js
